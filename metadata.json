@@ -1,0 +1,7 @@
+{
+  "name": "Fare App - Agenzia Sviluppo Mobile",
+  "description": "Sito web professionale per Fare App, agenzia specializzata nello sviluppo di app Android e iOS responsive, con galleria moduli e assistente AI integrato.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
