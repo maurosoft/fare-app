@@ -3,39 +3,35 @@ import { GoogleGenAI } from "@google/genai";
 import { ChatMessage } from "../types";
 
 export const DEFAULT_SYSTEM_INSTRUCTION = `
-Sei "Alex", il Senior App Consultant di "Fare App", l'agenzia web d'élite specializzata nello sviluppo di applicazioni mobili Native per iOS e Android.
+Sei "Zap", il consulente di "Fare App", l'agenzia specializzata nella realizzazione di App per iOS ed Android.
+Sei bravo a suggerire il tipo di app necessaria al negozio o professionista e quanto è utile per la crescita.
+Suggerisci le varie funzioni ecc. 
 Rispondi sempre in Italiano.
 `;
 
 export class GeminiService {
-  private getApiKey(): string | undefined {
-    // Vite inietta la variabile definita nel config
-    const key = process.env.API_KEY;
-    return (key && key !== "undefined" && key !== "") ? key : undefined;
-  }
-
   private getSystemInstruction(): string {
     return localStorage.getItem('fareapp_chatbot_prompt') || DEFAULT_SYSTEM_INSTRUCTION;
   }
 
+  // Check if API KEY is available via process.env.API_KEY as per guidelines
   getKeyStatus() {
-    const key = this.getApiKey();
-    if (!key) return { status: 'missing' as const, length: 0, env: 'Non Rilevata' };
+    const key = process.env.API_KEY;
+    if (!key || key === "undefined") return { status: 'missing' as const, length: 0, env: 'Non Rilevata' };
     return { status: 'ok' as const, length: key.length, env: 'Attiva' };
   }
 
+  // Fix: Initialize GoogleGenAI with named parameter and use ai.models.generateContent
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      const apiKey = this.getApiKey();
-      
-      if (!apiKey) {
+      if (!process.env.API_KEY) {
         return { 
           success: false, 
           message: "[v14.0] ERRORE: Chiave API non iniettata. Controlla le Environment Variables su Vercel e riesegui il deploy." 
         };
       }
       
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: 'Test build v14.',
@@ -50,20 +46,27 @@ export class GeminiService {
     }
   }
 
+  // Fix: Correctly map history and message to parts, using ai.models.generateContent for multi-turn chat
   async getChatResponse(history: ChatMessage[], message: string): Promise<string> {
     try {
-      const apiKey = this.getApiKey();
-      if (!apiKey) return "Servizio AI in manutenzione. Scrivi a info@fareapp.it";
+      if (!process.env.API_KEY) return "Servizio AI in manutenzione. Scrivi a info@fareapp.it";
 
-      const ai = new GoogleGenAI({ apiKey });
-      const chat = ai.chats.create({
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
+        contents: [
+          ...history.map(m => ({
+            role: m.role,
+            parts: [{ text: m.text }]
+          })),
+          { role: 'user', parts: [{ text: message }] }
+        ],
         config: { systemInstruction: this.getSystemInstruction() }
       });
 
-      const result = await chat.sendMessage({ message });
-      return result.text || "Spiacente, riprova più tardi.";
+      return response.text || "Spiacente, riprova più tardi.";
     } catch (error) {
+      console.error("Gemini Error:", error);
       return "Spiacente, ho un problema di connessione.";
     }
   }
