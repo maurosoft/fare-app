@@ -9,13 +9,9 @@ Rispondi sempre in Italiano.
 
 export class GeminiService {
   private getApiKey(): string | undefined {
-    try {
-      // @ts-ignore
-      const key = process.env.API_KEY || import.meta.env.VITE_API_KEY;
-      return key && key !== "undefined" ? key : undefined;
-    } catch {
-      return undefined;
-    }
+    // Vite inietta la variabile definita nel config
+    const key = process.env.API_KEY;
+    return (key && key !== "undefined" && key !== "") ? key : undefined;
   }
 
   private getSystemInstruction(): string {
@@ -35,29 +31,29 @@ export class GeminiService {
       if (!apiKey) {
         return { 
           success: false, 
-          message: "[v13.0] ERRORE: Chiave API assente. Assicurati che API_KEY sia nelle Environment Variables di Vercel e fai un Redeploy senza cache." 
+          message: "[v14.0] ERRORE: Chiave API non iniettata. Controlla le Environment Variables su Vercel e riesegui il deploy." 
         };
       }
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: 'Test connessione v13.',
+        contents: 'Test build v14.',
       });
       
       if (response && response.text) {
-        return { success: true, message: "[v13.0] ONLINE! L'intelligenza artificiale Alex è connessa correttamente." };
+        return { success: true, message: "[v14.0] Alex AI è ONLINE!" };
       }
-      return { success: false, message: "[v13.0] Errore di comunicazione con Google." };
+      return { success: false, message: "[v14.0] Errore risposta." };
     } catch (error: any) {
-      return { success: false, message: `[v13.0] ERRORE: ${error.message}` };
+      return { success: false, message: `[v14.0] ERRORE GOOGLE: ${error.message}` };
     }
   }
 
   async getChatResponse(history: ChatMessage[], message: string): Promise<string> {
     try {
       const apiKey = this.getApiKey();
-      if (!apiKey) return "Servizio AI non configurato. Scrivi a info@fareapp.it";
+      if (!apiKey) return "Servizio AI in manutenzione. Scrivi a info@fareapp.it";
 
       const ai = new GoogleGenAI({ apiKey });
       const chat = ai.chats.create({
@@ -66,9 +62,9 @@ export class GeminiService {
       });
 
       const result = await chat.sendMessage({ message });
-      return result.text || "Spiacente, non ho una risposta al momento.";
+      return result.text || "Spiacente, riprova più tardi.";
     } catch (error) {
-      return "Spiacente, Alex ha un problema di connessione temporaneo.";
+      return "Spiacente, ho un problema di connessione.";
     }
   }
 }
