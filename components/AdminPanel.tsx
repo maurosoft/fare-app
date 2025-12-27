@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, RotateCcw, X, Lock, CheckCircle2, Image as ImageIcon, Bot, Link as LinkIcon, Loader2, Pencil, Zap, AlertCircle, Smartphone, ExternalLink, Trash2, Plus, LayoutGrid, Info, HelpCircle, ChevronRight, RefreshCw, Upload, Camera } from 'lucide-react';
+import { Settings, RotateCcw, X, Lock, CheckCircle2, Image as ImageIcon, Bot, Link as LinkIcon, Loader2, Pencil, Zap, AlertCircle, Smartphone, ExternalLink, Trash2, Plus, LayoutGrid, Info, HelpCircle, ChevronRight, RefreshCw, Upload, Camera, Copy, Download, Globe, Server } from 'lucide-react';
 import { DEFAULT_SYSTEM_INSTRUCTION, geminiService } from '../services/geminiService';
 import { TEMPLATES as DEFAULT_TEMPLATES } from '../constants';
 import { Template } from '../types';
@@ -15,8 +15,13 @@ const DEFAULT_ADMIN = {
   password: '123456'
 };
 
+// NOTA: In produzione dovresti usare il tuo Cloud Name. 
+// Questo è un esempio che usa un upload "unsigned" (senza firma).
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/demo/image/upload";
+const UPLOAD_PRESET = "docs_upload_example_us_preset";
+
 const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
-  const [view, setView] = useState<'login' | 'editor' | 'templates' | 'branding'>('login');
+  const [view, setView] = useState<'login' | 'editor' | 'templates' | 'branding' | 'publish'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
@@ -28,12 +33,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [appStoreUrl, setAppStoreUrl] = useState<string>('');
   
   const [isSaved, setIsSaved] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [keyInfo, setKeyInfo] = useState({ status: 'missing', length: 0, env: 'unknown' });
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +74,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setKeyInfo(geminiService.getKeyStatus());
   };
 
+  const uploadToCloudinary = async (file: File): Promise<string | null> => {
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", UPLOAD_PRESET);
+
+    try {
+      const response = await fetch(CLOUDINARY_URL, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      setIsUploading(false);
+      return data.secure_url;
+    } catch (error) {
+      console.error("Errore upload Cloudinary:", error);
+      setIsUploading(false);
+      alert("Errore durante il caricamento dell'immagine online. Riprova.");
+      return null;
+    }
+  };
+
   const persistChanges = () => {
     localStorage.setItem('fareapp_templates', JSON.stringify(templates));
     localStorage.setItem('fareapp_chatbot_prompt', prompt);
@@ -86,27 +111,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setTemplates(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        updateTemplateField(id, 'image', base64String);
-      };
-      reader.readAsDataURL(file);
+      const publicUrl = await uploadToCloudinary(file);
+      if (publicUrl) {
+        updateTemplateField(id, 'image', publicUrl);
+      }
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSiteLogo(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const publicUrl = await uploadToCloudinary(file);
+      if (publicUrl) {
+        setSiteLogo(publicUrl);
+      }
     }
+  };
+
+  const generateConfigCode = () => {
+    const config = {
+      templates,
+      siteLogo,
+      playStoreUrl,
+      appStoreUrl,
+      prompt
+    };
+    return JSON.stringify(config, null, 2);
+  };
+
+  const copyConfigCode = () => {
+    navigator.clipboard.writeText(generateConfigCode());
+    alert("Codice copiato! Invialo allo sviluppatore per aggiornare il sito globalmente.");
   };
 
   const addNewTemplate = () => {
@@ -142,7 +180,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   <Lock size={36} />
                 </div>
                 <h2 className="font-black text-3xl tracking-tight">Fare App Admin</h2>
-                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Build v15.0 Image Support</p>
+                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Build v16.0 Global Sync</p>
               </div>
               <form onSubmit={handleLogin} className="space-y-4">
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-5 outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Email" required />
@@ -165,6 +203,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   <button onClick={() => setView('editor')} className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all ${view === 'editor' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>ALEX AI</button>
                   <button onClick={() => setView('templates')} className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all ${view === 'templates' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>GALLERIA APP</button>
                   <button onClick={() => setView('branding')} className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all ${view === 'branding' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>LOGHI & LINK</button>
+                  <button onClick={() => setView('publish')} className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all flex items-center gap-2 ${view === 'publish' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}><Globe size={14} /> PUBBLICA</button>
                 </nav>
               </div>
               <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-colors text-gray-400 hover:text-white">
@@ -174,6 +213,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
             <div className="flex-1 overflow-y-auto bg-gray-50 p-6 sm:p-10">
               
+              {view === 'publish' && (
+                <div className="max-w-4xl mx-auto space-y-8">
+                   <div className="bg-white p-10 rounded-[3rem] shadow-xl border-4 border-green-500/20">
+                      <div className="flex items-center gap-6 mb-8">
+                         <div className="bg-green-500 p-5 rounded-[2rem] text-white shadow-xl shadow-green-200">
+                            <Server size={40} />
+                         </div>
+                         <div>
+                            <h3 className="text-3xl font-black text-gray-900 leading-tight">Sincronizzazione Globale</h3>
+                            <p className="text-gray-500 font-medium">Per rendere le tue modifiche visibili a tutti gli utenti nel mondo.</p>
+                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                         <div className="bg-gray-50 p-8 rounded-[2rem] border border-gray-100">
+                            <h4 className="font-black text-lg mb-4 text-gray-800">1. Stato Caricamento</h4>
+                            <p className="text-sm text-gray-600 leading-relaxed mb-6">Le immagini che hai caricato sono ora ospitate online su Cloudinary. Chiunque abbia il link potrà vederle.</p>
+                            <div className="flex items-center gap-3 text-green-600 font-bold text-sm bg-green-50 p-4 rounded-xl border border-green-100">
+                               <CheckCircle2 size={20} /> Hosting Immagini: ATTIVO
+                            </div>
+                         </div>
+                         <div className="bg-gray-50 p-8 rounded-[2rem] border border-gray-100">
+                            <h4 className="font-black text-lg mb-4 text-gray-800">2. Aggiorna Sito</h4>
+                            <p className="text-sm text-gray-600 leading-relaxed mb-6">Copia il codice qui sotto e invialo allo sviluppatore. Verrà inserito nel file di sistema per rendere il sito definitivo.</p>
+                            <button onClick={copyConfigCode} className="w-full bg-gray-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-600 transition-all shadow-xl">
+                               <Copy size={20} /> COPIA CODICE PRODUZIONE
+                            </button>
+                         </div>
+                      </div>
+
+                      <div className="space-y-4">
+                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Codice Configurazione Generato (JSON)</label>
+                         <textarea readOnly value={generateConfigCode()} className="w-full h-48 p-6 bg-gray-900 text-blue-400 font-mono text-xs rounded-[1.5rem] shadow-inner outline-none" />
+                      </div>
+                   </div>
+                </div>
+              )}
+
               {view === 'editor' && (
                 <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2 space-y-6">
@@ -188,7 +265,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                         <button onClick={handleTestConnection} disabled={testStatus === 'loading'} className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-black text-[10px] uppercase bg-gray-900 text-white hover:bg-blue-600 transition-all">
                           {testStatus === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                          TEST SISTEMA v15
+                          TEST SISTEMA v16
                         </button>
                       </div>
 
@@ -207,20 +284,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
                   <div className="space-y-6">
                     <div className="bg-blue-600 p-8 rounded-[2rem] text-white shadow-2xl">
-                      <h4 className="font-black text-lg mb-4 flex items-center gap-2"><RefreshCw size={22}/> Area Immagini</h4>
-                      <p className="text-blue-100 text-xs leading-relaxed mb-6 font-medium">Ora puoi caricare le immagini direttamente:</p>
+                      <h4 className="font-black text-lg mb-4 flex items-center gap-2"><Globe size={22}/> Visibilità Globale</h4>
+                      <p className="text-blue-100 text-xs leading-relaxed mb-6 font-medium">Perché gli altri non vedono le modifiche?</p>
                       <ul className="space-y-4 text-[11px]">
                         <li className="flex gap-3">
                           <span className="bg-white/20 w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">1</span>
-                          <span>Vai in Galleria App</span>
+                          <span>LocalStorage è solo sul TUO browser attuale.</span>
                         </li>
                         <li className="flex gap-3">
                           <span className="bg-white/20 w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">2</span>
-                          <span>Clicca l'icona Fotocamera</span>
+                          <span>Le immagini caricate ora vanno su Cloudinary (visibili a tutti).</span>
                         </li>
                         <li className="flex gap-3">
                           <span className="bg-white/20 w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">3</span>
-                          <span>Salva i dati per applicare</span>
+                          <span>Usa la tab <b>PUBBLICA</b> per finalizzare il sito per tutti.</span>
                         </li>
                       </ul>
                     </div>
@@ -251,15 +328,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         
                         <div className="w-full sm:w-44 aspect-[9/18.5] bg-gray-50 rounded-[2.5rem] overflow-hidden border shrink-0 relative group">
                           <img src={t.image} className="w-full h-full object-cover" alt="" />
-                          <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                          <label className={`absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer ${isUploading ? 'pointer-events-none' : ''}`}>
                             <input 
                               type="file" 
                               className="hidden" 
                               accept="image/*"
+                              disabled={isUploading}
                               onChange={(e) => handleFileUpload(e, t.id)}
                             />
                             <div className="bg-white text-gray-900 p-4 rounded-full shadow-xl transform group-hover:scale-110 transition-transform">
-                              <Camera size={28} />
+                              {isUploading ? <Loader2 size={28} className="animate-spin text-blue-600" /> : <Camera size={28} />}
                             </div>
                           </label>
                         </div>
@@ -277,11 +355,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descrizione di Vendita</label>
                             <textarea value={t.description || ''} onChange={(e) => updateTemplateField(t.id, 'description', e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-[11px] h-24 resize-none" placeholder="Descrizione Marketing" />
                           </div>
-                          <div className="space-y-2">
-                             <label className="text-[10px] font-black text-gray-400 uppercase block">Link Store</label>
-                             <input value={t.playStoreUrl || ''} onChange={(e) => updateTemplateField(t.id, 'playStoreUrl', e.target.value)} className="w-full p-2.5 bg-gray-100 rounded-lg text-[10px]" placeholder="Link Android" />
-                             <input value={t.appStoreUrl || ''} onChange={(e) => updateTemplateField(t.id, 'appStoreUrl', e.target.value)} className="w-full p-2.5 bg-gray-100 rounded-lg text-[10px]" placeholder="Link iOS" />
-                          </div>
                         </div>
                       </div>
                     ))}
@@ -293,7 +366,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <div className="max-w-3xl mx-auto space-y-8">
                   <div className="bg-white p-12 rounded-[3.5rem] shadow-xl space-y-12">
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Logo Aziendale Principale</label>
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Logo Aziendale Principale (Ospitato Online)</label>
                       <div className="flex flex-col md:flex-row items-center gap-8 p-8 bg-gray-50 rounded-[2.5rem]">
                         <div className="w-40 h-40 bg-white rounded-3xl shadow-inner flex items-center justify-center p-4 border overflow-hidden shrink-0">
                           {siteLogo ? (
@@ -303,19 +376,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           )}
                         </div>
                         <div className="flex-1 space-y-4 w-full">
-                          <label className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black text-center cursor-pointer hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3">
-                            <Upload size={22} />
-                            CARICA NUOVO LOGO
+                          <label className={`w-full bg-blue-600 text-white p-5 rounded-2xl font-black text-center cursor-pointer hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3 ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Upload size={22} />}
+                            {isUploading ? 'CARICAMENTO...' : 'CARICA SU CLOUDINARY'}
                             <input 
                               type="file" 
                               className="hidden" 
                               accept="image/*"
+                              disabled={isUploading}
                               onChange={handleLogoUpload}
                             />
                           </label>
                           <div className="space-y-2">
-                            <p className="text-[10px] font-black text-gray-400 uppercase">Oppure usa un URL esterno:</p>
-                            <input value={siteLogo} onChange={(e) => setSiteLogo(e.target.value)} className="w-full p-4 bg-white border rounded-xl text-xs" placeholder="https://..." />
+                            <p className="text-[10px] font-black text-gray-400 uppercase">URL Attuale:</p>
+                            <input value={siteLogo} onChange={(e) => setSiteLogo(e.target.value)} className="w-full p-4 bg-white border rounded-xl text-xs font-mono" placeholder="https://..." />
+                            <p className="text-[9px] text-gray-400">Inserendo un URL di Cloudinary, l'immagine sarà visibile a tutti.</p>
                           </div>
                         </div>
                       </div>
@@ -337,12 +412,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             </div>
 
             <div className="p-10 bg-white border-t flex items-center justify-between">
-              <button type="button" onClick={() => { if(window.confirm('Vuoi cancellare ogni personalizzazione e tornare ai dati originali?')){ localStorage.clear(); window.location.reload(); } }} className="text-gray-400 hover:text-red-600 text-[10px] font-black uppercase">Reset di Fabbrica</button>
+              <button type="button" onClick={() => { if(window.confirm('Vuoi cancellare ogni personalizzazione e tornare ai dati originali?')){ localStorage.clear(); window.location.reload(); } }} className="text-gray-400 hover:text-red-600 text-[10px] font-black uppercase">Reset Locale</button>
               <div className="flex items-center gap-6">
                 <button type="button" onClick={onClose} className="px-8 py-4 text-gray-500 font-black text-xs uppercase">Chiudi</button>
                 <button type="button" onClick={persistChanges} className="bg-blue-600 text-white px-16 py-5 rounded-[1.5rem] font-black text-base shadow-2xl hover:bg-blue-700 transition-all flex items-center gap-3">
                   {isSaved ? <CheckCircle2 size={22} /> : null}
-                  {isSaved ? 'DATI SALVATI!' : 'SALVA TUTTO'}
+                  {isSaved ? 'SALVATO NEL TUO BROWSER!' : 'SALVA MODIFICHE'}
                 </button>
               </div>
             </div>
